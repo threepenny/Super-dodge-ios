@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>SUPER DODGE PRO</title>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { 
+            margin: 0; 
+            padding: 0;
+            background: #121212; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            touch-action: none; 
+            color: white; 
+            width: 100vw;
+            height: 100vh;
+        }
+        #gameCanvas { 
+            display: block; 
+            background: #121212;
+        }
+        #ui { 
+            position: absolute; 
+            top: env(safe-area-inset-top, 20px); 
+            left: 20px; 
+            pointer-events: none; 
+            z-index: 10;
+        }
+        .stat { font-size: 20px; font-weight: bold; margin-bottom: 5px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        #menu { 
+            position: absolute; 
+            top: 0; 
+            left: 0;
+            width: 100%; 
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center; 
+            z-index: 20;
+            background: rgba(18, 18, 18, 0.8);
+        }
+        h1 { font-size: 42px; color: #1e90ff; margin: 0 0 10px 0; }
+        p { font-size: 18px; margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="scoreDisplay" class="stat">SCORE: 0</div>
+        <div id="bestDisplay" class="stat" style="opacity: 0.6;">BEST: 0</div>
+    </div>
+
+    <div id="menu">
+        <h1>SUPER DODGE</h1>
+        <p>TAP SCREEN TO START</p>
+        <p style="font-size: 14px; opacity: 0.7; margin-top: 20px;">Avoid Red • Collect Green • Blue is Shield</p>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const menu = document.getElementById('menu');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const bestDisplay = document.getElementById('bestDisplay');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const SKINS = ["#1e90ff", "#ffa500", "#9b59b6", "#f1c40f", "#1abc9c"];
+        let score = 0;
+        let high_score = localStorage.getItem('high_score') || 0;
+        let gameActive = false;
+        let playerX = canvas.width / 2;
+        let objects = [];
+        let speed = 5;
+        let hasShield = false;
+        let shake = 0;
+
+        bestDisplay.innerText = "BEST: " + high_score;
+
+        window.addEventListener('touchmove', (e) => {
+            if(gameActive) {
+                playerX = e.touches[0].clientX;
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        window.addEventListener('touchstart', (e) => { 
+            if(!gameActive) startGame(); 
+        });
+
+        function vibe(pattern) {
+            if (navigator.vibrate) navigator.vibrate(pattern);
+        }
+
+        function startGame() {
+            score = 0;
+            speed = 5;
+            objects = [];
+            hasShield = false;
+            gameActive = true;
+            menu.style.display = 'none';
+            scoreDisplay.innerText = "SCORE: 0";
+            vibe(40);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            menu.style.display = 'flex';
+            vibe([80, 50, 80]);
+            if(score > high_score) {
+                high_score = score;
+                localStorage.setItem('high_score', high_score);
+                bestDisplay.innerText = "BEST: " + high_score;
+            }
+        }
+
+        function update() {
+            if(!gameActive) {
+                requestAnimationFrame(update);
+                return;
+            }
+
+            ctx.fillStyle = "#121212";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            let offsetX = (shake > 0) ? (Math.random() * 10 - 5) : 0;
+            if(shake > 0) shake--;
+
+            // Spawn
+            if(Math.random() < 0.05 + (score * 0.0005)) {
+                let r = Math.random();
+                let type = 'good';
+                if(r < 0.3) type = 'bad';
+                if(r < 0.02) type = 'shield';
+                objects.push({ x: Math.random() * (canvas.width - 40) + 20, y: -50, type });
+            }
+
+            // Draw Player
+            let skinColor = SKINS[Math.min(Math.floor(score/10), SKINS.length - 1)];
+            ctx.fillStyle = skinColor;
+            if(hasShield) {
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineWidth = 4;
+                ctx.strokeRect(playerX - 32 + offsetX, canvas.height - 102, 64, 64);
+            }
+            ctx.fillRect(playerX - 30 + offsetX, canvas.height - 100, 60, 60);
+
+            // Objects
+            for(let i = objects.length - 1; i >= 0; i--) {
+                let obj = objects[i];
+                obj.y += speed;
+
+                ctx.fillStyle = (obj.type === 'good') ? "#32ff7e" : (obj.type === 'bad') ? "#ff4757" : "#1e90ff";
+                ctx.beginPath();
+                if(obj.type === 'shield') ctx.rect(obj.x - 15, obj.y - 15, 30, 30);
+                else ctx.arc(obj.x + offsetX, obj.y, 18, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Collision
+                if(obj.y > canvas.height - 110 && obj.y < canvas.height - 30 && Math.abs(obj.x - playerX) < 45) {
+                    if(obj.type === 'good') {
+                        score++; speed += 0.04; vibe(20);
+                        scoreDisplay.innerText = "SCORE: " + score;
+                        objects.splice(i, 1);
+                    } else if(obj.type === 'shield') {
+                        hasShield = true; vibe(40); objects.splice(i, 1);
+                    } else {
+                        if(hasShield) { hasShield = false; shake = 10; vibe(40); objects.splice(i, 1); }
+                        else gameOver();
+                    }
+                } else if(obj.y > canvas.height + 50) {
+                    objects.splice(i, 1);
+                }
+            }
+            requestAnimationFrame(update);
+        }
+        update();
+    </script>
+</body>
+</html>
